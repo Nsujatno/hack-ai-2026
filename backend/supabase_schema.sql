@@ -1,8 +1,12 @@
 -- Run this in the Supabase SQL Editor
+-- (Drop & recreate if you already ran the old version)
 
-create table if not exists public.onboarding_surveys (
+drop table if exists public.onboarding_surveys;
+
+create table public.onboarding_surveys (
   id                uuid primary key default gen_random_uuid(),
-  user_id           uuid references auth.users(id) on delete set null,
+  -- No FK to auth.users — any UUID or null is accepted (hackathon demo)
+  user_id           uuid,
   topic             text not null,
   skill_level       text not null,   -- complete_beginner | know_basics | intermediate | advanced
   learning_goal     text not null,   -- career | hobby | academics | curious
@@ -11,13 +15,16 @@ create table if not exists public.onboarding_surveys (
   created_at        timestamptz default now()
 );
 
--- Allow any authenticated user to insert their own survey row
+-- RLS: enabled, but service-role key bypasses it (used by our backend)
 alter table public.onboarding_surveys enable row level security;
 
-create policy "Users can insert their own survey"
-  on public.onboarding_surveys for insert
-  with check (auth.uid() = user_id or user_id is null);
+-- Allow inserts from the service role (backend) without restriction
+create policy "Service role full access"
+  on public.onboarding_surveys
+  using (true)
+  with check (true);
 
+-- Optional: let authenticated users read their own rows via the anon key
 create policy "Users can read their own survey"
   on public.onboarding_surveys for select
   using (auth.uid() = user_id or user_id is null);
