@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Play, Pause, CheckCircle2, AlertCircle, Sparkles, ChevronRight } from 'lucide-react'
+import { X, Play, Pause, CheckCircle2, AlertCircle, Sparkles, ChevronRight, Trophy, Copy } from 'lucide-react'
 
 // Types for our Quiz Data
 export interface QuizQuestion {
@@ -28,12 +28,17 @@ interface LessonModalProps {
     onClose: () => void
     lesson: LessonData | null
     onComplete: (xpEarned: number) => void
+    challengeInvite?: {
+        challengerName: string
+        challengerScore: number
+        totalQuestions: number
+    }
 }
 
-export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModalProps) {
+export function LessonModal({ isOpen, onClose, lesson, onComplete, challengeInvite }: LessonModalProps) {
     // --- State ---
-    // 'video' | 'transitioning' | 'quiz' | 'completed'
-    const [phase, setPhase] = useState<'video' | 'transitioning' | 'quiz' | 'completed'>('video')
+    // 'invite' | 'video' | 'transitioning' | 'quiz' | 'completed'
+    const [phase, setPhase] = useState<'invite' | 'video' | 'transitioning' | 'quiz' | 'completed'>('video')
 
     // Video State
     const [isPlaying, setIsPlaying] = useState(false)
@@ -43,7 +48,11 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0)
     const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null)
     const [isSubmitted, setIsSubmitted] = useState(false)
-    const [score, setScore] = useState(0)
+    const [score, setScore] = useState(0) // XP
+    const [correctAnswersCount, setCorrectAnswersCount] = useState(0) // Raw count
+
+    // Challenge Mode State
+    const [showChallengeModal, setShowChallengeModal] = useState(false)
 
     // Refs for simulation
     const progressInterval = useRef<NodeJS.Timeout | null>(null)
@@ -51,20 +60,26 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
     // --- Reset State when Modal Opens ---
     useEffect(() => {
         if (isOpen) {
-            setPhase('video')
+            if (challengeInvite) {
+                setPhase('invite')
+            } else {
+                setPhase('video')
+            }
             setIsPlaying(false)
             setProgress(0)
             setCurrentQuestionIdx(0)
             setSelectedOptionId(null)
             setIsSubmitted(false)
             setScore(0)
+            setCorrectAnswersCount(0)
+            setShowChallengeModal(false)
         } else {
             // Cleanup on close
             if (progressInterval.current) {
                 clearInterval(progressInterval.current)
             }
         }
-    }, [isOpen])
+    }, [isOpen, challengeInvite])
 
     // --- Video Simulation Logic ---
     useEffect(() => {
@@ -128,6 +143,7 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
 
         if (isCorrect) {
             setScore(prev => prev + 10) // 10 XP per correct answer
+            setCorrectAnswersCount(prev => prev + 1)
         }
     }
 
@@ -180,117 +196,158 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
                 </button>
 
                 {/* ========================================================= */}
-                {/* LEFT SIDE: Video Player (Takes full width in 'video' phase) */}
+                {/* LEFT SIDE: Video Player & Invite Screen                   */}
                 {/* ========================================================= */}
                 <div
                     className={`
-                        relative bg-slate-900 flex flex-col justify-center transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] shrink-0
-                        ${phase === 'video' ? 'w-full aspect-video md:aspect-auto md:h-[600px]' : 'w-full md:w-[400px] aspect-video md:aspect-auto h-[300px] md:h-auto border-b md:border-b-0 md:border-r border-slate-800'}
+                        relative bg-slate-900 border-r border-slate-800 transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col items-center justify-center
+                        ${(phase === 'invite' || phase === 'video') ? 'w-full' : 'w-1/3 shrink-0 hidden md:flex'}
                     `}
                 >
-                    {/* Placeholder Video Content */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-slate-900 flex flex-col items-center justify-center p-8 text-center group">
+                    {phase === 'invite' && challengeInvite ? (
+                        // --- INVITATION SCREEN ---
+                        <div className="w-full max-w-md mx-auto p-8 flex flex-col items-center text-center space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                            <div className="w-24 h-24 bg-indigo-600/20 rounded-full flex items-center justify-center border-4 border-indigo-500 overflow-hidden shadow-[0_0_40px_rgba(99,102,241,0.4)]">
+                                <Trophy className="w-12 h-12 text-indigo-400" />
+                            </div>
+                            <div className="space-y-4">
+                                <h1 className="text-4xl font-serif font-bold text-white tracking-tight">You've Been Challenged!</h1>
+                                <p className="text-xl text-slate-300">
+                                    <span className="font-bold text-white">{challengeInvite.challengerName}</span> challenged you to beat their score on this lesson.
+                                </p>
+                            </div>
 
-                        {/* Fake Video Controls Overlay */}
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
-                            <div className="text-white/80 font-medium text-left">{lesson.title}</div>
+                            <div className="bg-slate-800/80 backdrop-blur-md rounded-2xl p-6 border border-slate-700 w-full shadow-xl">
+                                <div className="text-sm font-bold text-indigo-400 uppercase tracking-widest mb-2">Lesson Details</div>
+                                <h3 className="text-xl font-bold text-white mb-4">{lesson?.title}</h3>
 
-                            <div className="flex flex-col gap-2 relative">
-                                {/* Progress Bar */}
-                                <div
-                                    className="h-2 w-full bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
-                                    onPointerDown={(e) => {
-                                        e.currentTarget.setPointerCapture(e.pointerId)
-                                        const bounds = e.currentTarget.getBoundingClientRect()
-                                        const x = e.clientX - bounds.left
-                                        const newProgress = Math.min(Math.max((x / bounds.width) * 100, 0), 100)
-                                        setProgress(newProgress)
-
-                                        // Store that we are dragging on the element itself to avoid adding React state that triggers re-renders every pixel
-                                        e.currentTarget.dataset.dragging = "true"
-
-                                        // Pause video while dragging
-                                        if (isPlaying) {
-                                            setIsPlaying(false)
-                                            e.currentTarget.dataset.wasPlaying = "true"
-                                        }
-                                    }}
-                                    onPointerMove={(e) => {
-                                        if (e.currentTarget.dataset.dragging === "true") {
-                                            const bounds = e.currentTarget.getBoundingClientRect()
-                                            const x = e.clientX - bounds.left
-                                            const newProgress = Math.min(Math.max((x / bounds.width) * 100, 0), 100)
-                                            setProgress(newProgress)
-                                        }
-                                    }}
-                                    onPointerUp={(e) => {
-                                        e.currentTarget.releasePointerCapture(e.pointerId)
-                                        e.currentTarget.dataset.dragging = "false"
-                                        if (progress >= 100) {
-                                            setIsPlaying(false)
-                                            handleVideoComplete()
-                                        } else if (e.currentTarget.dataset.wasPlaying === "true") {
-                                            setIsPlaying(true)
-                                            e.currentTarget.dataset.wasPlaying = "false"
-                                        }
-                                    }}
-                                >
-                                    <div
-                                        className="h-full bg-indigo-500 transition-all duration-100 ease-linear rounded-full"
-                                        style={{ width: `${progress}%` }}
-                                    />
-                                </div>
-                                {/* Controls */}
-                                <div className="flex items-center gap-4 text-white">
-                                    <button onClick={togglePlay} className="hover:text-indigo-400 transition-colors">
-                                        {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white" />}
-                                    </button>
-                                    <span className="text-sm font-mono opacity-80">
-                                        {Math.floor((progress / 100) * lesson.duration)}s / {lesson.duration}s
-                                    </span>
+                                <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
+                                    <span className="text-slate-400 font-medium">Their Score:</span>
+                                    <span className="text-2xl font-black text-amber-400">{challengeInvite.challengerScore} <span className="text-lg text-slate-500">/ {challengeInvite.totalQuestions}</span></span>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Central Play Button (if not playing and not finished) */}
-                        {!isPlaying && progress < 100 && (
                             <button
-                                onClick={togglePlay}
-                                className="w-20 h-20 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-110 transition-all duration-300 z-10"
+                                onClick={() => setPhase('video')}
+                                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-lg shadow-[0_0_20px_rgba(99,102,241,0.5)] transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 group"
                             >
-                                <Play className="w-8 h-8 ml-1 fill-white" />
+                                Start Challenge
+                                <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                             </button>
-                        )}
-
-                        {/* Placeholder Label */}
-                        <div className={`mt-6 text-indigo-200/50 font-mono text-sm uppercase tracking-widest ${isPlaying ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
-                            Lesson Video (Placeholder)
                         </div>
+                    ) : (
+                        // --- VIDEO PLAYER SCREEN ---
+                        <div
+                            className={`
+                            relative w-full transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] mx-auto
+                            ${phase === 'video' ? 'aspect-video md:aspect-auto md:h-[600px] max-w-4xl px-6 md:px-12 scale-100 opacity-100' : 'aspect-video md:aspect-auto h-[300px] md:h-auto px-8 scale-95 opacity-60'}
+                            `}
+                        >
+                            {/* Placeholder Video Content */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-slate-900 flex flex-col items-center justify-center p-8 text-center group">
 
-                        {/* Skip Video Button */}
-                        {phase === 'video' && (
-                            <button
-                                onClick={() => {
-                                    setProgress(100)
-                                    setIsPlaying(false)
-                                    handleVideoComplete()
-                                }}
-                                className="absolute top-6 right-6 px-4 py-2 bg-black/30 hover:bg-black/50 text-white/80 hover:text-white rounded-full text-sm font-medium transition-colors border border-white/10 flex items-center gap-2 backdrop-blur-md z-20 group-hover:opacity-100 md:opacity-0 animate-in fade-in"
-                            >
-                                Skip Video
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        )}
-                    </div>
+                                {/* Fake Video Controls Overlay */}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
+                                    <div className="text-white/80 font-medium text-left">{lesson.title}</div>
+
+                                    <div className="flex flex-col gap-2 relative">
+                                        {/* Progress Bar */}
+                                        <div
+                                            className="h-2 w-full bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
+                                            onPointerDown={(e) => {
+                                                e.currentTarget.setPointerCapture(e.pointerId)
+                                                const bounds = e.currentTarget.getBoundingClientRect()
+                                                const x = e.clientX - bounds.left
+                                                const newProgress = Math.min(Math.max((x / bounds.width) * 100, 0), 100)
+                                                setProgress(newProgress)
+
+                                                // Store that we are dragging on the element itself to avoid adding React state that triggers re-renders every pixel
+                                                e.currentTarget.dataset.dragging = "true"
+
+                                                // Pause video while dragging
+                                                if (isPlaying) {
+                                                    setIsPlaying(false)
+                                                    e.currentTarget.dataset.wasPlaying = "true"
+                                                }
+                                            }}
+                                            onPointerMove={(e) => {
+                                                if (e.currentTarget.dataset.dragging === "true") {
+                                                    const bounds = e.currentTarget.getBoundingClientRect()
+                                                    const x = e.clientX - bounds.left
+                                                    const newProgress = Math.min(Math.max((x / bounds.width) * 100, 0), 100)
+                                                    setProgress(newProgress)
+                                                }
+                                            }}
+                                            onPointerUp={(e) => {
+                                                e.currentTarget.releasePointerCapture(e.pointerId)
+                                                e.currentTarget.dataset.dragging = "false"
+                                                if (progress >= 100) {
+                                                    setIsPlaying(false)
+                                                    handleVideoComplete()
+                                                } else if (e.currentTarget.dataset.wasPlaying === "true") {
+                                                    setIsPlaying(true)
+                                                    e.currentTarget.dataset.wasPlaying = "false"
+                                                }
+                                            }}
+                                        >
+                                            <div
+                                                className="h-full bg-indigo-500 transition-all duration-100 ease-linear rounded-full"
+                                                style={{ width: `${progress}%` }}
+                                            />
+                                        </div>
+                                        {/* Controls */}
+                                        <div className="flex items-center gap-4 text-white">
+                                            <button onClick={togglePlay} className="hover:text-indigo-400 transition-colors">
+                                                {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white" />}
+                                            </button>
+                                            <span className="text-sm font-mono opacity-80">
+                                                {Math.floor((progress / 100) * lesson.duration)}s / {lesson.duration}s
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Central Play Button (if not playing and not finished) */}
+                                {!isPlaying && progress < 100 && (
+                                    <button
+                                        onClick={togglePlay}
+                                        className="w-20 h-20 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-110 transition-all duration-300 z-10"
+                                    >
+                                        <Play className="w-8 h-8 ml-1 fill-white" />
+                                    </button>
+                                )}
+
+                                {/* Placeholder Label */}
+                                <div className={`mt-6 text-indigo-200/50 font-mono text-sm uppercase tracking-widest ${isPlaying ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
+                                    Lesson Video (Placeholder)
+                                </div>
+
+                                {/* Skip Video Button */}
+                                {phase === 'video' && (
+                                    <button
+                                        onClick={() => {
+                                            setProgress(100)
+                                            setIsPlaying(false)
+                                            handleVideoComplete()
+                                        }}
+                                        className="absolute top-6 right-6 px-4 py-2 bg-black/30 hover:bg-black/50 text-white/80 hover:text-white rounded-full text-sm font-medium transition-colors border border-white/10 flex items-center gap-2 backdrop-blur-md z-20 group-hover:opacity-100 md:opacity-0 animate-in fade-in"
+                                    >
+                                        Skip Video
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* ========================================================= */}
-                {/* RIGHT SIDE: Quiz Interface (Hidden in 'video' phase)      */}
+                {/* RIGHT SIDE: Quiz Interface (Hidden in 'invite' and 'video' phase) */}
                 {/* ========================================================= */}
                 <div
                     className={`
                         flex-1 flex flex-col bg-slate-50 relative overflow-hidden transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]
-                        ${phase === 'video' ? 'w-0 opacity-0 flex-none' : 'w-full opacity-100 p-6 md:p-10'}
+                        ${(phase === 'invite' || phase === 'video') ? 'w-0 opacity-0 flex-none' : 'w-full opacity-100 p-6 md:p-10'}
                     `}
                 >
                     {(phase === 'quiz' || phase === 'completed' || phase === 'transitioning') && (
@@ -301,21 +358,146 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
 
                             {phase === 'completed' ? (
                                 // --- COMPLETED STATE ---
-                                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
-                                    <div className="w-24 h-24 bg-gradient-to-tr from-amber-400 to-amber-500 rounded-full flex items-center justify-center shadow-xl shadow-amber-500/20 animate-bounce">
-                                        <Sparkles className="w-12 h-12 text-white" />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-3xl font-serif font-bold text-slate-900 mb-2">Lesson Complete!</h2>
-                                        <p className="text-lg text-slate-500">You earned <span className="font-bold text-amber-500">+{score} XP</span></p>
-                                    </div>
-                                    <button
-                                        onClick={handleFinish}
-                                        className="mt-4 px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 hover:-translate-y-0.5 transition-all"
-                                    >
-                                        Return to Dashboard
-                                    </button>
-                                </div>
+                                <>
+                                    {!showChallengeModal ? (
+                                        challengeInvite ? (
+                                            // --- HEAD-TO-HEAD RESULTS ---
+                                            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                                                <div className="space-y-2">
+                                                    <h2 className="text-3xl font-serif font-bold text-slate-900">
+                                                        {correctAnswersCount > challengeInvite.challengerScore ? 'You Win!' : correctAnswersCount < challengeInvite.challengerScore ? 'You Lost!' : "It's a Tie!"}
+                                                    </h2>
+                                                    {correctAnswersCount > challengeInvite.challengerScore && (
+                                                        <p className="text-amber-500 font-bold animate-pulse">+20 Bonus XP</p>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center justify-center gap-6 w-full max-w-lg">
+                                                    {/* Challenger Card */}
+                                                    <div className={`flex-1 p-6 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all ${correctAnswersCount < challengeInvite.challengerScore ? 'bg-indigo-50 border-indigo-200 shadow-[0_0_30px_rgba(99,102,241,0.2)] scale-105 relative' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
+                                                        {correctAnswersCount < challengeInvite.challengerScore && (
+                                                            <div className="absolute -top-4 bg-amber-400 text-white rounded-full p-1.5 shadow-md border-2 border-white">
+                                                                <Trophy className="w-5 h-5 fill-white" />
+                                                            </div>
+                                                        )}
+                                                        <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xl uppercase">
+                                                            {challengeInvite.challengerName.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-slate-700">{challengeInvite.challengerName}</div>
+                                                            <div className="text-2xl font-black text-slate-900">{challengeInvite.challengerScore} <span className="text-sm font-medium text-slate-500">/ {challengeInvite.totalQuestions}</span></div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="font-black text-slate-300 italic text-2xl">VS</div>
+
+                                                    {/* User Card */}
+                                                    <div className={`flex-1 p-6 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all ${correctAnswersCount > challengeInvite.challengerScore ? 'bg-amber-50 border-amber-200 shadow-[0_0_30px_rgba(245,158,11,0.2)] scale-105 relative' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
+                                                        {correctAnswersCount > challengeInvite.challengerScore && (
+                                                            <div className="absolute -top-4 bg-amber-400 text-white rounded-full p-1.5 shadow-md border-2 border-white">
+                                                                <Trophy className="w-5 h-5 fill-white" />
+                                                            </div>
+                                                        )}
+                                                        <div className="w-16 h-16 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xl">
+                                                            You
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-slate-700">You</div>
+                                                            <div className="text-2xl font-black text-slate-900">{correctAnswersCount} <span className="text-sm font-medium text-slate-500">/ {lesson?.questions.length}</span></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-4 mt-4 w-full max-w-sm mx-auto">
+                                                    <button
+                                                        onClick={() => {
+                                                            // Mock Rematch: reset phase to video
+                                                            setPhase('video')
+                                                            setProgress(0)
+                                                            setIsPlaying(true)
+                                                            setCurrentQuestionIdx(0)
+                                                            setIsSubmitted(false)
+                                                            setScore(0)
+                                                            setCorrectAnswersCount(0)
+                                                            setSelectedOptionId(null)
+                                                        }}
+                                                        className="flex-1 px-6 py-3.5 bg-white border-2 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl shadow-sm transition-all"
+                                                    >
+                                                        Rematch
+                                                    </button>
+                                                    <button
+                                                        onClick={handleFinish}
+                                                        className="flex-1 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 hover:-translate-y-0.5 transition-all"
+                                                    >
+                                                        Continue
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            // --- NORMAL LESSON COMPLETE ---
+                                            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
+                                                <div className="w-24 h-24 bg-gradient-to-tr from-amber-400 to-amber-500 rounded-full flex items-center justify-center shadow-xl shadow-amber-500/20 animate-bounce">
+                                                    <Sparkles className="w-12 h-12 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-3xl font-serif font-bold text-slate-900 mb-2">Lesson Complete!</h2>
+                                                    <p className="text-lg text-slate-500">You earned <span className="font-bold text-amber-500">+{score} XP</span></p>
+                                                </div>
+                                                <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full max-w-sm mx-auto">
+                                                    <button
+                                                        onClick={() => setShowChallengeModal(true)}
+                                                        className="flex-1 px-6 py-3.5 bg-white border-2 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        Challenge a Friend
+                                                    </button>
+                                                    <button
+                                                        onClick={handleFinish}
+                                                        className="flex-1 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 hover:-translate-y-0.5 transition-all"
+                                                    >
+                                                        Continue Learning
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )
+                                    ) : (
+                                        // --- CHALLENGE CREATION (FAKE LINK) ---
+                                        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                                            <div className="w-20 h-20 bg-indigo-100 rounded-2xl flex items-center justify-center shadow-sm">
+                                                <Trophy className="w-10 h-10 text-indigo-600" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-3xl font-serif font-bold text-slate-900 mb-2">Challenge a Friend</h2>
+                                                <p className="text-slate-500 max-w-sm mx-auto">Invite a friend to take this lesson and see who scores higher.</p>
+                                            </div>
+
+                                            <div className="w-full max-w-sm mt-8 space-y-4">
+                                                <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-xl border border-slate-200">
+                                                    <div className="flex-1 text-left font-mono text-sm text-slate-600 truncate select-all">
+                                                        skillduel.app/challenge/abc123
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText("skillduel.app/challenge/abc123")
+                                                            // Could add a toast here later
+                                                        }}
+                                                        className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <Copy className="w-4 h-4" /> Copy
+                                                    </button>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowChallengeModal(false)
+                                                        handleFinish()
+                                                    }}
+                                                    className="w-full px-6 py-3.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl shadow-lg transition-all"
+                                                >
+                                                    Done
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             ) : (
                                 // --- QUIZ STATE ---
                                 <>

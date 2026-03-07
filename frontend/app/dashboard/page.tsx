@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
 import Link from 'next/link'
 import { LessonModal, LessonData } from '@/components/LessonModal'
+import { ChallengeInbox, ChallengeInvite } from '@/components/ChallengeInbox'
 
 // --- Mock Data ---
 // ... (Chapter data remains the same) ...
@@ -34,6 +35,17 @@ const MOCK_LESSON_DATA: LessonData = {
                 { id: 'd', text: 'It creates a new memory pointer.', isCorrect: false },
             ],
             explanation: 'Variables declared with const cannot be reassigned. Doing so will throw a TypeError in most modern engines.'
+        },
+        {
+            id: 'q3',
+            text: 'Which of the following is true about "var" declarations?',
+            options: [
+                { id: 'a', text: 'They are block-scoped.', isCorrect: false },
+                { id: 'b', text: 'They cannot be reassigned.', isCorrect: false },
+                { id: 'c', text: 'They are strictly typed.', isCorrect: false },
+                { id: 'd', text: 'They are function-scoped or globally-scoped.', isCorrect: true },
+            ],
+            explanation: '"var" is function-scoped (or globally-scoped if declared outside a function), which can lead to unexpected behavior compared to block-scoped "let" and "const".'
         }
     ]
 }
@@ -88,13 +100,22 @@ export default function DashboardPage() {
     const [xp, setXp] = useState(350)
     const [isLessonModalOpen, setIsLessonModalOpen] = useState(false)
     const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null)
+    const [activeInvite, setActiveInvite] = useState<ChallengeInvite | undefined>(undefined)
 
     const handleNodeClick = (node: LessonNode) => {
         if (node.status === 'active') {
             // Load the mock lesson data for this test
             setSelectedLesson(MOCK_LESSON_DATA)
+            setActiveInvite(undefined)
             setIsLessonModalOpen(true)
         }
+    }
+
+    const handleAcceptChallenge = (invite: ChallengeInvite) => {
+        // In a real app, this would fetch the specific lesson data for the challenge
+        setSelectedLesson(MOCK_LESSON_DATA)
+        setActiveInvite(invite)
+        setIsLessonModalOpen(true)
     }
 
     const handleLessonComplete = (xpEarned: number) => {
@@ -254,6 +275,9 @@ export default function DashboardPage() {
                 {/* Right Sidebar (Stats & Goals) */}
                 <div className="hidden lg:block w-80 flex-shrink-0 space-y-6">
 
+                    {/* Challenge Inbox */}
+                    <ChallengeInbox onAcceptChallenge={handleAcceptChallenge} />
+
                     {/* Weekly Goal Card */}
                     <div className="bg-white rounded-2xl p-6 border-2 border-slate-200 shadow-sm relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 rounded-bl-full pointer-events-none"></div>
@@ -312,6 +336,7 @@ export default function DashboardPage() {
                 onClose={() => setIsLessonModalOpen(false)}
                 lesson={selectedLesson}
                 onComplete={handleLessonComplete}
+                challengeInvite={activeInvite}
             />
 
             {/* Custom Styles for Tooltip Arrow & Animations */}
