@@ -3,6 +3,40 @@
 import { useState } from 'react'
 import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
 import Link from 'next/link'
+import { LessonModal, LessonData } from '@/components/LessonModal'
+
+// --- Mock Data ---
+// ... (Chapter data remains the same) ...
+const MOCK_LESSON_DATA: LessonData = {
+    id: 'l4',
+    title: 'Core Mechanics: Variable Binding',
+    description: 'Learn how to bind variables and manage memory in your applications.',
+    duration: 30, // 30 second simulated video
+    questions: [
+        {
+            id: 'q1',
+            text: 'Which keyword is typically used to define a block-scoped, mutable variable?',
+            options: [
+                { id: 'a', text: 'var', isCorrect: false },
+                { id: 'b', text: 'let', isCorrect: true },
+                { id: 'c', text: 'const', isCorrect: false },
+                { id: 'd', text: 'static', isCorrect: false },
+            ],
+            explanation: '"let" creates variables that can be reassigned but exist only within the block they are defined.'
+        },
+        {
+            id: 'q2',
+            text: 'What happens if you try to reassign a "const" variable?',
+            options: [
+                { id: 'a', text: 'It creates a global variable.', isCorrect: false },
+                { id: 'b', text: 'It throws a TypeError.', isCorrect: true },
+                { id: 'c', text: 'It fails silently.', isCorrect: false },
+                { id: 'd', text: 'It creates a new memory pointer.', isCorrect: false },
+            ],
+            explanation: 'Variables declared with const cannot be reassigned. Doing so will throw a TypeError in most modern engines.'
+        }
+    ]
+}
 
 // Types
 type LessonStatus = 'completed' | 'active' | 'locked'
@@ -51,6 +85,23 @@ const MOCK_CHAPTERS: Chapter[] = [
 ]
 
 export default function DashboardPage() {
+    const [xp, setXp] = useState(350)
+    const [isLessonModalOpen, setIsLessonModalOpen] = useState(false)
+    const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null)
+
+    const handleNodeClick = (node: LessonNode) => {
+        if (node.status === 'active') {
+            // Load the mock lesson data for this test
+            setSelectedLesson(MOCK_LESSON_DATA)
+            setIsLessonModalOpen(true)
+        }
+    }
+
+    const handleLessonComplete = (xpEarned: number) => {
+        setXp(prev => prev + xpEarned)
+        // Here you would also update the node status locally or via API
+    }
+
     return (
         <div className="min-h-screen bg-slate-50 selection:bg-indigo-500/30">
             {/* Top Navigation Bar */}
@@ -71,7 +122,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-1.5 text-indigo-500 font-bold">
                             <Zap className="w-5 h-5 fill-indigo-500" />
-                            <span>350</span>
+                            <span>{xp}</span>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center border-2 border-slate-300 overflow-hidden">
                             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User avatar" className="w-full h-full object-cover" />
@@ -81,10 +132,10 @@ export default function DashboardPage() {
             </nav>
 
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col lg:flex-row gap-8">
-                
+
                 {/* Main Content Area (Learning Path) */}
                 <div className="flex-1 lg:max-w-2xl mx-auto w-full">
-                    
+
                     {/* Course Header */}
                     <div className="mb-10 text-center lg:text-left">
                         <h1 className="text-4xl font-serif font-extrabold text-slate-900 mb-3">Your Journey</h1>
@@ -95,7 +146,7 @@ export default function DashboardPage() {
                     <div className="relative pb-20">
                         {MOCK_CHAPTERS.map((chapter, chapterIdx) => (
                             <div key={chapter.id} className="mb-16 relative">
-                                
+
                                 {/* Chapter Header */}
                                 <div className="bg-white/90 backdrop-blur-md p-5 rounded-2xl border-2 border-slate-200 shadow-sm mb-12 flex items-start gap-4 mx-auto max-w-sm">
                                     <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
@@ -122,14 +173,14 @@ export default function DashboardPage() {
                                         const isActive = node.status === 'active';
                                         const isLocked = node.status === 'locked';
                                         const isBoss = node.type === 'boss';
-                                        
+
                                         // Colors and sizing
                                         let bgClass = "bg-slate-200"
                                         let borderClass = "border-slate-300"
                                         let iconColor = "text-slate-400"
                                         let shadowClass = ""
                                         let sizeClass = isBoss ? "w-20 h-20" : "w-16 h-16"
-                                        
+
                                         if (isCompleted) {
                                             bgClass = "bg-slate-300"
                                             borderClass = "border-slate-400 border-b-4"
@@ -144,12 +195,12 @@ export default function DashboardPage() {
                                         }
 
                                         return (
-                                            <div 
-                                                key={node.id} 
+                                            <div
+                                                key={node.id}
                                                 className="relative group z-10 flex flex-col items-center"
                                                 style={{ transform: `translateX(${node.position}px)` }}
                                             >
-                                                
+
                                                 {/* Active State Tooltip/Label */}
                                                 {isActive && (
                                                     <div className="absolute -top-12 bg-white px-4 py-2 rounded-xl shadow-lg border border-slate-200 font-bold text-slate-800 text-sm whitespace-nowrap z-20 tooltip-arrow opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
@@ -157,8 +208,9 @@ export default function DashboardPage() {
                                                     </div>
                                                 )}
 
-                                                <button 
+                                                <button
                                                     disabled={isLocked}
+                                                    onClick={() => handleNodeClick(node)}
                                                     className={`
                                                         ${sizeClass} rounded-full flex items-center justify-center transition-all duration-200 relative
                                                         ${bgClass} ${borderClass} ${shadowClass}
@@ -177,11 +229,11 @@ export default function DashboardPage() {
                                                     {isLocked && (
                                                         <Lock className={`w-6 h-6 ${iconColor}`} />
                                                     )}
-                                                    
+
                                                     {/* Boss crown */}
                                                     {isBoss && !isCompleted && (
                                                         <div className="absolute -top-4 text-amber-500">
-                                                            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>
+                                                            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" /></svg>
                                                         </div>
                                                     )}
                                                 </button>
@@ -201,21 +253,21 @@ export default function DashboardPage() {
 
                 {/* Right Sidebar (Stats & Goals) */}
                 <div className="hidden lg:block w-80 flex-shrink-0 space-y-6">
-                    
+
                     {/* Weekly Goal Card */}
                     <div className="bg-white rounded-2xl p-6 border-2 border-slate-200 shadow-sm relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 rounded-bl-full pointer-events-none"></div>
-                        
+
                         <div className="flex items-center gap-3 mb-4">
                             <Target className="w-6 h-6 text-slate-800" />
                             <h3 className="font-bold text-slate-800 text-lg">Daily Goal</h3>
                         </div>
-                        
+
                         <div className="flex items-end gap-2 mb-3">
                             <span className="text-3xl font-extrabold text-indigo-600">1</span>
                             <span className="text-slate-500 font-bold mb-1">/ 15 mins</span>
                         </div>
-                        
+
                         <div className="w-full bg-slate-100 rounded-full h-3 mb-4 overflow-hidden">
                             <div className="bg-indigo-500 h-3 rounded-full" style={{ width: '15%' }}></div>
                         </div>
@@ -228,18 +280,18 @@ export default function DashboardPage() {
                     {/* Quick Start Card */}
                     <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 shadow-xl shadow-indigo-500/20 text-white relative overflow-hidden group">
                         <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
-                        
+
                         <h3 className="font-bold text-xl mb-2 relative z-10">Up Next</h3>
                         <p className="text-indigo-100 text-sm mb-6 relative z-10 h-10 overflow-hidden text-ellipsis line-clamp-2">
                             Mastering the core mechanics of your skill. Focus on precision.
                         </p>
-                        
+
                         <button className="w-full py-3 px-4 bg-white text-indigo-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 hover:shadow-lg transition-all active:scale-95 relative z-10">
                             <span>Continue Learning</span>
                             <ArrowRight className="w-4 h-4" />
                         </button>
                     </div>
-                    
+
                     {/* Unlock Premium or extra feature */}
                     <div className="bg-white rounded-2xl p-6 border-2 border-slate-200 shadow-sm flex items-start gap-4 hover:border-indigo-300 transition-colors cursor-pointer group">
                         <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
@@ -252,11 +304,19 @@ export default function DashboardPage() {
                     </div>
 
                 </div>
-
             </div>
 
+            {/* Render the Lesson Modal */}
+            <LessonModal
+                isOpen={isLessonModalOpen}
+                onClose={() => setIsLessonModalOpen(false)}
+                lesson={selectedLesson}
+                onComplete={handleLessonComplete}
+            />
+
             {/* Custom Styles for Tooltip Arrow & Animations */}
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .tooltip-arrow::after {
                     content: '';
                     position: absolute;
@@ -278,7 +338,7 @@ export default function DashboardPage() {
                     animation: bounce-slow 3s infinite ease-in-out;
                 }
             `}} />
-            
+
         </div>
     )
 }
