@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowRight, ArrowLeft, BookOpen, Target, Sparkles, Clock, CheckCircle2, MonitorPlay, Palette, GraduationCap, Compass, Briefcase, Smile, Zap, Coffee, Dumbbell, Feather } from 'lucide-react'
-import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { ArrowRight, Target, Sparkles, CheckCircle2, Palette, GraduationCap, Compass, Briefcase, Zap, Coffee, Dumbbell } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
 
 type SurveyData = {
     topic: string;
@@ -13,33 +13,64 @@ type SurveyData = {
     timeCommitment: string;
 };
 
+// Maps frontend display IDs → backend enum values
+const SKILL_LEVEL_MAP: Record<string, string> = {
+    beginner: 'complete_beginner',
+    basics: 'know_basics',
+    intermediate: 'intermediate',
+    advanced: 'advanced',
+}
+
+const GOAL_MAP: Record<string, string> = {
+    career: 'career',
+    hobby: 'hobby',
+    school: 'academics',
+    curious: 'curious',
+}
+
+const TONE_MAP: Record<string, string> = {
+    fun: 'fun_energetic',
+    professional: 'professional_direct',
+    challenging: 'coach',
+    relaxed: 'relaxed',
+}
+
+const TIME_MAP: Record<string, string> = {
+    '5min': '5_minutes',
+    '15min': '10_15_minutes',
+    '30min': '30_plus_minutes',
+    varies: 'own_pace',
+}
+
 const SKILL_LEVELS = [
     { id: 'beginner', title: 'Complete beginner', description: 'I have never done this before.' },
     { id: 'basics', title: 'I know the basics', description: 'I have basic foundational knowledge.' },
     { id: 'intermediate', title: 'Intermediate', description: "I've practiced but have gaps." },
     { id: 'advanced', title: 'Advanced', description: 'I want to refine specific areas.' }
-];
+]
 
 const GOALS = [
     { id: 'career', title: 'Career & Professional Growth', description: 'Focus on industry applications', icon: Briefcase },
     { id: 'hobby', title: 'Personal Hobby & Fun', description: 'Focus on creative and enjoyable projects', icon: Palette },
     { id: 'school', title: 'School & Academics', description: 'Focus on theory and core principles', icon: GraduationCap },
     { id: 'curious', title: 'Just Curious', description: 'Keep it high-level and interesting', icon: Compass }
-];
+]
 
 const TONES = [
     { id: 'fun', title: 'Fun & Energetic', description: 'Upbeat, uses analogies, highly engaging', icon: Zap },
     { id: 'professional', title: 'Professional & Direct', description: 'No fluff, straight to the facts', icon: Target },
     { id: 'challenging', title: 'Challenging & Coach-like', description: 'Pushes you to beat your high score', icon: Dumbbell },
     { id: 'relaxed', title: 'Relaxed & Encouraging', description: 'Paced, supportive, easygoing', icon: Coffee }
-];
+]
 
 const TIME_COMMITMENTS = [
     { id: '5min', title: '5 minutes', description: 'Just the daily lesson' },
     { id: '15min', title: '10–15 minutes', description: 'A consistent daily habit' },
     { id: '30min', title: '30+ minutes', description: 'Deep, focused learning' },
     { id: 'varies', title: 'It varies', description: "I'll go at my own pace" }
-];
+]
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export default function SurveyPage() {
     const router = useRouter()
@@ -51,17 +82,58 @@ export default function SurveyPage() {
         tone: '',
         timeCommitment: ''
     })
+    const [submitting, setSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [userId, setUserId] = useState<string | null>(null)
+
+    // Grab the logged-in user's ID as soon as the component mounts
+    useEffect(() => {
+        const supabase = createClient()
+        supabase.auth.getSession().then(({ data }) => {
+            setUserId(data.session?.user?.id ?? null)
+        })
+    }, [])
 
     const totalSteps = 5
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (step < totalSteps - 1) {
             setStep(s => s + 1)
-        } else {
-            // Finish survey
-            console.log('Survey complete:', data)
-            // Redirect to dashboard
+            return
+        }
+
+        // Last step — submit to backend
+        setSubmitting(true)
+        setError(null)
+
+        try {
+            const res = await fetch(`${API_BASE}/api/onboarding/survey`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,           // null if not logged in
+                    topic: data.topic,
+                    skill_level: SKILL_LEVEL_MAP[data.skillLevel],
+                    learning_goal: GOAL_MAP[data.goal],
+                    instructor_tone: TONE_MAP[data.tone],
+                    daily_commitment: TIME_MAP[data.timeCommitment],
+                }),
+            })
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                throw new Error(err?.detail ?? `Server error ${res.status}`)
+            }
+
+            const result = await res.json()
+            // Store survey_id so downstream pages (dashboard, pipeline) can use it
+            localStorage.setItem('survey_id', result.survey_id)
             router.push('/dashboard')
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'Something went wrong. Please try again.'
+            setError(message)
+        } finally {
+            setSubmitting(false)
         }
     }
 
@@ -75,12 +147,12 @@ export default function SurveyPage() {
 
     const isStepValid = () => {
         switch (step) {
-            case 0: return data.topic.trim().length > 0;
-            case 1: return data.skillLevel !== '';
-            case 2: return data.goal !== '';
-            case 3: return data.tone !== '';
-            case 4: return data.timeCommitment !== '';
-            default: return false;
+            case 0: return data.topic.trim().length > 0
+            case 1: return data.skillLevel !== ''
+            case 2: return data.goal !== ''
+            case 3: return data.tone !== ''
+            case 4: return data.timeCommitment !== ''
+            default: return false
         }
     }
 
@@ -151,8 +223,8 @@ export default function SurveyPage() {
                                         key={level.id}
                                         onClick={() => setData({ ...data, skillLevel: level.id })}
                                         className={`flex flex-col items-start p-5 rounded-2xl border-2 transition-all duration-200 text-left ${data.skillLevel === level.id
-                                                ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
-                                                : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                            ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
+                                            : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between w-full mb-2">
@@ -178,14 +250,14 @@ export default function SurveyPage() {
 
                             <div className="grid grid-cols-1 gap-4">
                                 {GOALS.map(goal => {
-                                    const Icon = goal.icon;
+                                    const Icon = goal.icon
                                     return (
                                         <button
                                             key={goal.id}
                                             onClick={() => setData({ ...data, goal: goal.id })}
                                             className={`flex items-center p-5 rounded-2xl border-2 transition-all duration-200 text-left group ${data.goal === goal.id
-                                                    ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
-                                                    : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                                ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
+                                                : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
                                                 }`}
                                         >
                                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mr-5 transition-colors ${data.goal === goal.id ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700'
@@ -216,14 +288,14 @@ export default function SurveyPage() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {TONES.map(tone => {
-                                    const Icon = tone.icon;
+                                    const Icon = tone.icon
                                     return (
                                         <button
                                             key={tone.id}
                                             onClick={() => setData({ ...data, tone: tone.id })}
                                             className={`flex flex-col items-start p-6 rounded-2xl border-2 transition-all duration-200 text-left group gap-4 ${data.tone === tone.id
-                                                    ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
-                                                    : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                                ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
+                                                : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
                                                 }`}
                                         >
                                             <div className="flex w-full justify-between items-start">
@@ -260,8 +332,8 @@ export default function SurveyPage() {
                                         key={time.id}
                                         onClick={() => setData({ ...data, timeCommitment: time.id })}
                                         className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-200 text-left ${data.timeCommitment === time.id
-                                                ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
-                                                : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                            ? 'border-indigo-500 bg-indigo-50/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]'
+                                            : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
                                             }`}
                                     >
                                         <div className="flex flex-col">
@@ -284,14 +356,21 @@ export default function SurveyPage() {
 
                 </div>
 
+                {/* Error message */}
+                {error && (
+                    <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
+                        {error}
+                    </div>
+                )}
+
                 {/* Footer Controls */}
                 <div className="mt-10 pt-8 border-t border-slate-100 flex items-center justify-between">
                     <button
                         onClick={handleBack}
                         disabled={step === 0}
                         className={`font-semibold py-2 px-4 rounded-xl transition-colors ${step === 0
-                                ? 'text-slate-300 cursor-not-allowed opacity-0 pointer-events-none'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                            ? 'text-slate-300 cursor-not-allowed opacity-0 pointer-events-none'
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
                             }`}
                     >
                         Back
@@ -299,14 +378,26 @@ export default function SurveyPage() {
 
                     <button
                         onClick={handleNext}
-                        disabled={!isStepValid()}
-                        className={`group relative flex items-center justify-center gap-2 py-3.5 px-8 font-bold rounded-xl transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 ${isStepValid()
-                                ? 'bg-indigo-600 text-white shadow-[0_4px_14px_0_rgba(99,102,241,0.39)] hover:bg-indigo-500 hover:shadow-[0_6px_20px_rgba(99,102,241,0.23)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none'
-                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        disabled={!isStepValid() || submitting}
+                        className={`group relative flex items-center justify-center gap-2 py-3.5 px-8 font-bold rounded-xl transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 ${isStepValid() && !submitting
+                            ? 'bg-indigo-600 text-white shadow-[0_4px_14px_0_rgba(99,102,241,0.39)] hover:bg-indigo-500 hover:shadow-[0_6px_20px_rgba(99,102,241,0.23)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                             }`}
                     >
-                        <span>{step === totalSteps - 1 ? 'Finish Setup' : 'Continue'}</span>
-                        <ArrowRight className={`w-4 h-4 transition-transform ${isStepValid() ? 'group-hover:translate-x-1' : ''}`} />
+                        {submitting ? (
+                            <>
+                                <svg className="animate-spin w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                                <span>Saving…</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>{step === totalSteps - 1 ? 'Finish Setup' : 'Continue'}</span>
+                                <ArrowRight className={`w-4 h-4 transition-transform ${isStepValid() ? 'group-hover:translate-x-1' : ''}`} />
+                            </>
+                        )}
                     </button>
                 </div>
 
