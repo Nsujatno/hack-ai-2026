@@ -263,7 +263,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-4 sm:gap-6">
                         <div className="flex items-center gap-1.5 text-orange-500 font-bold">
                             <Flame className="w-5 h-5 fill-orange-500" />
-                            <span>12</span>
+                            <span>1</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-indigo-500 font-bold">
                             <Zap className="w-5 h-5 fill-indigo-500" />

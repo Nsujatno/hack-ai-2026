@@ -33,17 +33,6 @@ export const INITIAL_INVITES: ChallengeInvite[] = [
         status: 'completed',
         won: true,
         timestamp: '1d ago'
-    },
-    {
-        id: 'c3',
-        challengerName: 'CodeMaster99',
-        challengerAvatarId: 'Jack',
-        lessonTitle: 'Introduction & Setup',
-        challengerScore: 3,
-        totalQuestions: 3,
-        status: 'completed',
-        won: false,
-        timestamp: '3d ago'
     }
 ]
 
