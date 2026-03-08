@@ -140,9 +140,14 @@ export default function DashboardPage() {
     }, [userId])
 
     const handleNodeClick = (node: LessonNode) => {
-        if (node.status === 'active') {
+        if (node.status === 'active' || node.status === 'completed') {
             // Load the fetched active lesson data
-            setSelectedLesson(activeLessonData)
+            if (activeLessonData) {
+                setSelectedLesson({
+                    ...activeLessonData,
+                    title: node.title
+                })
+            }
             setIsLessonModalOpen(true)
         }
     }
@@ -150,6 +155,29 @@ export default function DashboardPage() {
     const handleLessonComplete = (xpEarned: number) => {
         setXp(prev => prev + xpEarned)
         // Here you would also update the node status locally or via API
+        setChapters(prevChapters => {
+            const newChapters = [...prevChapters]
+            let foundActive = false
+            for (let c = 0; c < newChapters.length; c++) {
+                const chapter = { ...newChapters[c], nodes: [...newChapters[c].nodes] }
+                newChapters[c] = chapter
+                
+                for (let n = 0; n < chapter.nodes.length; n++) {
+                    if (chapter.nodes[n].status === 'active') {
+                        // Mark current as completed
+                        chapter.nodes[n] = { ...chapter.nodes[n], status: 'completed' }
+                        // Unlock next node
+                        if (n + 1 < chapter.nodes.length) {
+                            chapter.nodes[n + 1] = { ...chapter.nodes[n + 1], status: 'active' }
+                        }
+                        foundActive = true
+                        break
+                    }
+                }
+                if (foundActive) break
+            }
+            return newChapters
+        })
     }
 
     if (loading) {
@@ -245,10 +273,10 @@ export default function DashboardPage() {
                                         let sizeClass = isBoss ? "w-20 h-20" : "w-16 h-16"
 
                                         if (isCompleted) {
-                                            bgClass = "bg-slate-300"
-                                            borderClass = "border-slate-400 border-b-4"
-                                            iconColor = "text-white"
-                                            shadowClass = "shadow-[0_4px_0_0_rgb(148,163,184)]" // slate-400
+                                            bgClass = "bg-amber-100"
+                                            borderClass = "border-amber-200 border-b-4"
+                                            iconColor = "text-amber-500"
+                                            shadowClass = "shadow-[0_4px_0_0_rgb(253,230,138)]" // amber-200
                                         } else if (isActive) {
                                             bgClass = "bg-indigo-500"
                                             borderClass = "border-indigo-600 border-b-6 shadow-xl shadow-indigo-500/30"
@@ -328,16 +356,13 @@ export default function DashboardPage() {
 
                         <div className="flex items-end gap-2 mb-3">
                             <span className="text-3xl font-extrabold text-indigo-600">1</span>
-                            <span className="text-slate-500 font-bold mb-1">/ 15 mins</span>
+                            <span className="text-slate-500 font-bold mb-1">/ 5 mins</span>
                         </div>
 
                         <div className="w-full bg-slate-100 rounded-full h-3 mb-4 overflow-hidden">
-                            <div className="bg-indigo-500 h-3 rounded-full" style={{ width: '15%' }}></div>
+                            <div className="bg-indigo-500 h-3 rounded-full" style={{ width: '20%' }}></div>
                         </div>
 
-                        <button className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
-                            Edit Goal
-                        </button>
                     </div>
 
                     {/* Quick Start Card */}
