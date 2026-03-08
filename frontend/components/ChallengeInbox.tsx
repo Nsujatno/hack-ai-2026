@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Trophy, Swords, X, Check, Clock } from 'lucide-react'
 
 export interface ChallengeInvite {
@@ -13,12 +12,12 @@ export interface ChallengeInvite {
     timestamp: string
 }
 
-const MOCK_INBOX_DATA: ChallengeInvite[] = [
+export const INITIAL_INVITES: ChallengeInvite[] = [
     {
         id: 'c1',
         challengerName: 'AlexChen',
         challengerAvatarId: 'Aneka',
-        lessonTitle: 'Core Mechanics',
+        lessonTitle: 'LLMs: Your Creative AI Companions!',
         challengerScore: 3,
         totalQuestions: 3,
         status: 'pending',
@@ -34,27 +33,15 @@ const MOCK_INBOX_DATA: ChallengeInvite[] = [
         status: 'completed',
         won: true,
         timestamp: '1d ago'
-    },
-    {
-        id: 'c3',
-        challengerName: 'CodeMaster99',
-        challengerAvatarId: 'Jack',
-        lessonTitle: 'Introduction & Setup',
-        challengerScore: 3,
-        totalQuestions: 3,
-        status: 'completed',
-        won: false,
-        timestamp: '3d ago'
     }
 ]
 
 interface ChallengeInboxProps {
+    invites: ChallengeInvite[]
     onAcceptChallenge: (challenge: ChallengeInvite) => void
 }
 
-export function ChallengeInbox({ onAcceptChallenge }: ChallengeInboxProps) {
-    const [invites] = useState<ChallengeInvite[]>(MOCK_INBOX_DATA)
-
+export function ChallengeInbox({ invites, onAcceptChallenge }: ChallengeInboxProps) {
     const pendingCount = invites.filter(i => i.status === 'pending').length
 
     return (

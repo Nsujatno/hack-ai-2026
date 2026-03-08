@@ -2,10 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
+import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target, ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
 import { LessonModal, LessonData } from '@/components/LessonModal'
-import { ChallengeInbox, ChallengeInvite } from '@/components/ChallengeInbox'
+import { ChallengeInbox, ChallengeInvite, INITIAL_INVITES } from '@/components/ChallengeInbox'
+
+// Read the saved avatar URL from localStorage (written by the shop Save button)
+const DEFAULT_AVATAR_URL = 'https://api.dicebear.com/9.x/avataaars/svg?seed=Felix&skinColor=edb98a&top=shortFlat&topProbability=100&clothing=hoodie&accessoriesProbability=0'
+const getSavedAvatarUrl = () => {
+    if (typeof window === 'undefined') return DEFAULT_AVATAR_URL
+    return localStorage.getItem('skillDuelAvatarUrl') ?? DEFAULT_AVATAR_URL
+}
 
 // --- Mock Data ---
 // ... (Chapter data remains the same) ...
@@ -102,10 +109,12 @@ export default function DashboardPage() {
     const [isLessonModalOpen, setIsLessonModalOpen] = useState(false)
     const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null)
     const [activeInvite, setActiveInvite] = useState<ChallengeInvite | undefined>(undefined)
-    
     // Server state
     const [chapters, setChapters] = useState<Chapter[]>([])
     const [activeLessonData, setActiveLessonData] = useState<LessonData | null>(null)
+    const [pvpLesson, setPvpLesson] = useState<LessonData | null>(null)
+    const [invites, setInvites] = useState<ChallengeInvite[]>(INITIAL_INVITES)
+    const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [userId, setUserId] = useState<string | null>(null)
@@ -118,9 +127,30 @@ export default function DashboardPage() {
         })
     }, [])
 
+    // Load local state overrides (for demo persistence)
+    useEffect(() => {
+        const savedDemo = localStorage.getItem('demo_dashboard_state')
+        if (savedDemo) {
+            try {
+                const parsed = JSON.parse(savedDemo)
+                if (parsed.xp !== undefined) setXp(parsed.xp)
+                if (parsed.invites !== undefined) setInvites(parsed.invites)
+            } catch (e) {}
+        }
+    }, [])
+
     // Fetch Dashboard Data
     useEffect(() => {
         if (userId === null) return // Wait for user ID resolution
+
+        const savedDemo = localStorage.getItem('demo_dashboard_state')
+        let cachedChapters: Chapter[] | null = null
+        if (savedDemo) {
+            try {
+                const parsed = JSON.parse(savedDemo)
+                if (parsed.chapters) cachedChapters = parsed.chapters
+            } catch (e) {}
+        }
 
         const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
         
@@ -130,7 +160,7 @@ export default function DashboardPage() {
                 if (!res.ok) {
                     if (res.status === 404) {
                         // Fallback to mock data or empty state if no survey found
-                        setChapters(MOCK_CHAPTERS)
+                        setChapters(cachedChapters ?? MOCK_CHAPTERS)
                         setActiveLessonData(MOCK_LESSON_DATA)
                         setLoading(false)
                         return
@@ -138,14 +168,14 @@ export default function DashboardPage() {
                     throw new Error('Failed to load dashboard data')
                 }
                 const data = await res.json()
-                setChapters(data.chapters)
+                setChapters(cachedChapters ?? data.chapters)
                 setActiveLessonData(data.activeLesson)
                 setLoading(false)
             } catch (err: any) {
                 console.error(err)
                 setError(err.message)
                 // Fallback to mock data for presentation purposes if backend fails
-                setChapters(MOCK_CHAPTERS)
+                setChapters(cachedChapters ?? MOCK_CHAPTERS)
                 setActiveLessonData(MOCK_LESSON_DATA)
                 setLoading(false)
             }
@@ -153,6 +183,27 @@ export default function DashboardPage() {
         
         fetchDashboard()
     }, [userId])
+
+    // Save state overrides on change (for demo persistence)
+    useEffect(() => {
+        if (chapters.length > 0) {
+            localStorage.setItem('demo_dashboard_state', JSON.stringify({
+                xp,
+                invites,
+                chapters
+            }))
+        }
+    }, [xp, invites, chapters])
+
+
+    // Fetch PvP challenge lesson from backend (Supabase cache)
+    useEffect(() => {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+        fetch(`${API_BASE}/api/pvp-challenge`)
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then((data: LessonData) => setPvpLesson(data))
+            .catch(err => console.error('Failed to load PvP challenge lesson:', err))
+    }, [])
 
     const handleNodeClick = (node: LessonNode) => {
         if (node.status === 'active' || node.status === 'completed') {
@@ -163,44 +214,63 @@ export default function DashboardPage() {
                     title: node.title
                 })
             }
+            setActiveNodeId(node.id)
             setActiveInvite(undefined)
             setIsLessonModalOpen(true)
         }
     }
 
     const handleAcceptChallenge = (invite: ChallengeInvite) => {
-        // In a real app, this would fetch the specific lesson data for the challenge
-        setSelectedLesson(MOCK_LESSON_DATA)
+        // Use the Supabase-fetched PvP lesson as the battle content
+        if (!pvpLesson) return
+        setSelectedLesson(pvpLesson)
         setActiveInvite(invite)
+        setActiveNodeId(null)
         setIsLessonModalOpen(true)
     }
 
+
     const handleLessonComplete = (xpEarned: number) => {
         setXp(prev => prev + xpEarned)
-        // Here you would also update the node status locally or via API
-        setChapters(prevChapters => {
-            const newChapters = [...prevChapters]
-            let foundActive = false
-            for (let c = 0; c < newChapters.length; c++) {
-                const chapter = { ...newChapters[c], nodes: [...newChapters[c].nodes] }
-                newChapters[c] = chapter
-                
-                for (let n = 0; n < chapter.nodes.length; n++) {
-                    if (chapter.nodes[n].status === 'active') {
-                        // Mark current as completed
-                        chapter.nodes[n] = { ...chapter.nodes[n], status: 'completed' }
-                        // Unlock next node
-                        if (n + 1 < chapter.nodes.length) {
-                            chapter.nodes[n + 1] = { ...chapter.nodes[n + 1], status: 'active' }
+
+        if (activeInvite) {
+            // This was a PvP challenge — mark the invite as completed, don't touch the path
+            const correctCount = xpEarned / 10 // 10 XP per correct answer
+            const won = correctCount > activeInvite.challengerScore
+            setInvites(prev => prev.map(inv =>
+                inv.id === activeInvite.id
+                    ? { ...inv, status: 'completed', won }
+                    : inv
+            ))
+            setActiveInvite(undefined)
+            return
+        }
+
+        // Normal lesson — advance the learning path based on the clicked node
+        if (activeNodeId) {
+            setChapters(prevChapters => {
+                const newChapters = [...prevChapters]
+                for (let c = 0; c < newChapters.length; c++) {
+                    const chapterIndex = newChapters[c].nodes.findIndex(n => n.id === activeNodeId)
+                    if (chapterIndex !== -1) {
+                        const chapter = { ...newChapters[c], nodes: [...newChapters[c].nodes] }
+                        newChapters[c] = chapter
+                        
+                        const currentNode = chapter.nodes[chapterIndex]
+                        if (currentNode.status === 'active') {
+                            chapter.nodes[chapterIndex] = { ...currentNode, status: 'completed' }
+                            
+                            // Unlock next node
+                            if (chapterIndex + 1 < chapter.nodes.length) {
+                                chapter.nodes[chapterIndex + 1] = { ...chapter.nodes[chapterIndex + 1], status: 'active' }
+                            }
                         }
-                        foundActive = true
                         break
                     }
                 }
-                if (foundActive) break
-            }
-            return newChapters
-        })
+                return newChapters
+            })
+        }
     }
 
     if (loading) {
@@ -232,15 +302,23 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-4 sm:gap-6">
                         <div className="flex items-center gap-1.5 text-orange-500 font-bold">
                             <Flame className="w-5 h-5 fill-orange-500" />
-                            <span>12</span>
+                            <span>1</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-indigo-500 font-bold">
                             <Zap className="w-5 h-5 fill-indigo-500" />
                             <span>{xp}</span>
                         </div>
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center border-2 border-slate-300 overflow-hidden">
-                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User avatar" className="w-full h-full object-cover" />
+                        <div className="flex items-center gap-2">
+                            <Link href="/shop" className="flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:scale-105 transition-all shadow-sm border border-indigo-100" title="XP Shop">
+                                <ShoppingCart className="w-5 h-5" />
+                            </Link>
+                            <Link href="/trophies" className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-100 hover:scale-105 transition-all shadow-sm border border-amber-100" title="Trophy Case">
+                                <Trophy className="w-5 h-5" />
+                            </Link>
                         </div>
+                        <Link href="/shop" className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center border-2 border-slate-300 overflow-hidden hover:ring-2 hover:ring-indigo-400 transition-all" title="Customize Avatar">
+                            <img src={getSavedAvatarUrl()} alt="User avatar" className="w-full h-full object-cover" />
+                        </Link>
                     </div>
                 </div>
             </nav>
@@ -369,7 +447,7 @@ export default function DashboardPage() {
                 <div className="hidden lg:block w-80 flex-shrink-0 space-y-6">
 
                     {/* Challenge Inbox */}
-                    <ChallengeInbox onAcceptChallenge={handleAcceptChallenge} />
+                    <ChallengeInbox invites={invites} onAcceptChallenge={handleAcceptChallenge} />
 
                     {/* Weekly Goal Card */}
                     <div className="bg-white rounded-2xl p-6 border-2 border-slate-200 shadow-sm relative overflow-hidden">
@@ -420,7 +498,6 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Render the Lesson Modal */}
             <LessonModal
                 isOpen={isLessonModalOpen}
                 onClose={() => setIsLessonModalOpen(false)}
