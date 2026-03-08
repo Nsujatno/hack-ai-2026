@@ -1,12 +1,40 @@
 import uuid
+from typing import Dict, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from app.database import get_supabase
 from app.models.onboarding import SurveyResponse, SurveySubmission
+from app.langgraph.graph import invoke_pipeline
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
+# In-memory dictionary to track async job status
+# Mapping: job_id -> {"status": "processing" | "completed" | "failed", "result": dict | None, "error": str | None}
+active_jobs: Dict[str, Dict[str, Any]] = {}
+
+def run_pipeline_task(job_id: str, survey_data: dict):
+    """
+    Background task that invokes the LangGraph pipeline.
+    """
+    try:
+        # survey_data contains the user responses (topic, skill_level, learning_goal, instructor_tone, daily_commitment)
+        # We map learning_goal -> goal and daily_commitment -> time_commitment to match what invoke_pipeline expects internally
+        inputs = {
+            "topic": survey_data.get("topic"),
+            "skill_level": survey_data.get("skill_level"),
+            "goal": survey_data.get("learning_goal"),
+            "instructor_tone": survey_data.get("instructor_tone"),
+            "time_commitment": survey_data.get("daily_commitment"),
+        }
+        
+        result = invoke_pipeline(inputs)
+        
+        active_jobs[job_id]["status"] = "completed"
+        active_jobs[job_id]["result"] = result
+    except Exception as e:
+        active_jobs[job_id]["status"] = "failed"
+        active_jobs[job_id]["error"] = str(e)
 
 @router.post("/survey", response_model=SurveyResponse, status_code=201)
 async def submit_survey(payload: SurveySubmission) -> SurveyResponse:
@@ -50,6 +78,46 @@ async def submit_survey(payload: SurveySubmission) -> SurveyResponse:
         daily_commitment=saved["daily_commitment"],
     )
 
+@router.post("/generate-course")
+async def generate_course(payload: SurveySubmission, background_tasks: BackgroundTasks):
+    """
+    Kick off the LangGraph course generation pipeline in the background.
+    Returns a job_id that the frontend can poll.
+    """
+    job_id = str(uuid.uuid4())
+    active_jobs[job_id] = {
+        "status": "processing",
+        "result": None,
+        "error": None
+    }
+    
+    # We pass the validated payload as a dict
+    survey_data = {
+        "topic": payload.topic,
+        "skill_level": payload.skill_level.value,
+        "learning_goal": payload.learning_goal.value,
+        "instructor_tone": payload.instructor_tone.value,
+        "daily_commitment": payload.daily_commitment.value,
+    }
+    
+    background_tasks.add_task(run_pipeline_task, job_id, survey_data)
+    
+    return {"job_id": job_id, "status": "processing"}
+
+@router.get("/job/{job_id}")
+async def get_job_status(job_id: str):
+    """
+    Poll the status of a course generation job.
+    """
+    job = active_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    return {
+        "job_id": job_id,
+        "status": job["status"],
+        "error": job.get("error")
+    }
 
 @router.get("/survey/questions")
 async def get_survey_questions() -> dict:

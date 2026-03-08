@@ -128,7 +128,28 @@ export default function SurveyPage() {
             const result = await res.json()
             // Store survey_id so downstream pages (dashboard, pipeline) can use it
             localStorage.setItem('survey_id', result.survey_id)
-            router.push('/dashboard')
+            
+            // Kick off the background generation
+            const generateRes = await fetch(`${API_BASE}/api/onboarding/generate-course`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    topic: data.topic,
+                    skill_level: SKILL_LEVEL_MAP[data.skillLevel],
+                    learning_goal: GOAL_MAP[data.goal],
+                    instructor_tone: TONE_MAP[data.tone],
+                    daily_commitment: TIME_MAP[data.timeCommitment],
+                }),
+            })
+
+            if (!generateRes.ok) {
+                const err = await generateRes.json().catch(() => ({}))
+                throw new Error(err?.detail ?? `Error starting generation ${generateRes.status}`)
+            }
+
+            const generateResult = await generateRes.json()
+            router.push(`/building?job_id=${generateResult.job_id}`)
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : 'Something went wrong. Please try again.'
             setError(message)
