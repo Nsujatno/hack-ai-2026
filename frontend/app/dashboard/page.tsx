@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/utils/supabase/client'
 import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
 import Link from 'next/link'
 import { LessonModal, LessonData } from '@/components/LessonModal'
@@ -88,11 +89,60 @@ export default function DashboardPage() {
     const [xp, setXp] = useState(350)
     const [isLessonModalOpen, setIsLessonModalOpen] = useState(false)
     const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null)
+    const [chapters, setChapters] = useState<Chapter[]>([])
+    const [activeLessonData, setActiveLessonData] = useState<LessonData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [userId, setUserId] = useState<string | null>(null)
+
+    // Load User
+    useEffect(() => {
+        const supabase = createClient()
+        supabase.auth.getSession().then(({ data }: any) => {
+            setUserId(data.session?.user?.id ?? null)
+        })
+    }, [])
+
+    // Fetch Dashboard Data
+    useEffect(() => {
+        if (userId === null) return // Wait for user ID resolution
+
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+        
+        const fetchDashboard = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/api/dashboard/${userId}`)
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        // Fallback to mock data or empty state if no survey found
+                        setChapters(MOCK_CHAPTERS)
+                        setActiveLessonData(MOCK_LESSON_DATA)
+                        setLoading(false)
+                        return
+                    }
+                    throw new Error('Failed to load dashboard data')
+                }
+                const data = await res.json()
+                setChapters(data.chapters)
+                setActiveLessonData(data.activeLesson)
+                setLoading(false)
+            } catch (err: any) {
+                console.error(err)
+                setError(err.message)
+                // Fallback to mock data for presentation purposes if backend fails
+                setChapters(MOCK_CHAPTERS)
+                setActiveLessonData(MOCK_LESSON_DATA)
+                setLoading(false)
+            }
+        }
+        
+        fetchDashboard()
+    }, [userId])
 
     const handleNodeClick = (node: LessonNode) => {
         if (node.status === 'active') {
-            // Load the mock lesson data for this test
-            setSelectedLesson(MOCK_LESSON_DATA)
+            // Load the fetched active lesson data
+            setSelectedLesson(activeLessonData)
             setIsLessonModalOpen(true)
         }
     }
@@ -101,6 +151,19 @@ export default function DashboardPage() {
         setXp(prev => prev + xpEarned)
         // Here you would also update the node status locally or via API
     }
+
+    if (loading) {
+        return (
+             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                 <div className="flex items-center gap-3">
+                     <Target className="w-6 h-6 text-indigo-500 animate-pulse" />
+                     <span className="font-bold text-slate-500">Loading Dashboard...</span>
+                 </div>
+             </div>
+        )
+    }
+
+    // Now standard return flow for the page (replace `MOCK_CHAPTERS` references below)
 
     return (
         <div className="min-h-screen bg-slate-50 selection:bg-indigo-500/30">
@@ -144,7 +207,7 @@ export default function DashboardPage() {
 
                     {/* The Path */}
                     <div className="relative pb-20">
-                        {MOCK_CHAPTERS.map((chapter, chapterIdx) => (
+                        {chapters.map((chapter, chapterIdx) => (
                             <div key={chapter.id} className="mb-16 relative">
 
                                 {/* Chapter Header */}

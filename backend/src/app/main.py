@@ -26,7 +26,10 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
+from app.routers import dashboard
+
 app.include_router(onboarding.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------
