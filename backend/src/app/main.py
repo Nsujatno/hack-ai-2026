@@ -26,10 +26,11 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
-from app.routers import dashboard
+from app.routers import dashboard, pvp_challenge
 
 app.include_router(onboarding.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(pvp_challenge.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

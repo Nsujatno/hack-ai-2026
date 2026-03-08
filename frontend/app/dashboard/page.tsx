@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
 import Link from 'next/link'
 import { LessonModal, LessonData } from '@/components/LessonModal'
-import { ChallengeInbox, ChallengeInvite } from '@/components/ChallengeInbox'
+import { ChallengeInbox, ChallengeInvite, INITIAL_INVITES } from '@/components/ChallengeInbox'
 
 // --- Mock Data ---
 // ... (Chapter data remains the same) ...
@@ -102,10 +102,11 @@ export default function DashboardPage() {
     const [isLessonModalOpen, setIsLessonModalOpen] = useState(false)
     const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null)
     const [activeInvite, setActiveInvite] = useState<ChallengeInvite | undefined>(undefined)
-    
     // Server state
     const [chapters, setChapters] = useState<Chapter[]>([])
     const [activeLessonData, setActiveLessonData] = useState<LessonData | null>(null)
+    const [pvpLesson, setPvpLesson] = useState<LessonData | null>(null)
+    const [invites, setInvites] = useState<ChallengeInvite[]>(INITIAL_INVITES)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [userId, setUserId] = useState<string | null>(null)
@@ -154,6 +155,15 @@ export default function DashboardPage() {
         fetchDashboard()
     }, [userId])
 
+    // Fetch PvP challenge lesson from backend (Supabase cache)
+    useEffect(() => {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+        fetch(`${API_BASE}/api/pvp-challenge`)
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then((data: LessonData) => setPvpLesson(data))
+            .catch(err => console.error('Failed to load PvP challenge lesson:', err))
+    }, [])
+
     const handleNodeClick = (node: LessonNode) => {
         if (node.status === 'active' || node.status === 'completed') {
             // Load the fetched active lesson data
@@ -169,15 +179,31 @@ export default function DashboardPage() {
     }
 
     const handleAcceptChallenge = (invite: ChallengeInvite) => {
-        // In a real app, this would fetch the specific lesson data for the challenge
-        setSelectedLesson(MOCK_LESSON_DATA)
+        // Use the Supabase-fetched PvP lesson as the battle content
+        if (!pvpLesson) return
+        setSelectedLesson(pvpLesson)
         setActiveInvite(invite)
         setIsLessonModalOpen(true)
     }
 
+
     const handleLessonComplete = (xpEarned: number) => {
         setXp(prev => prev + xpEarned)
-        // Here you would also update the node status locally or via API
+
+        if (activeInvite) {
+            // This was a PvP challenge — mark the invite as completed, don't touch the path
+            const correctCount = xpEarned / 10 // 10 XP per correct answer
+            const won = correctCount > activeInvite.challengerScore
+            setInvites(prev => prev.map(inv =>
+                inv.id === activeInvite.id
+                    ? { ...inv, status: 'completed', won }
+                    : inv
+            ))
+            setActiveInvite(undefined)
+            return
+        }
+
+        // Normal lesson — advance the learning path
         setChapters(prevChapters => {
             const newChapters = [...prevChapters]
             let foundActive = false
@@ -187,9 +213,7 @@ export default function DashboardPage() {
                 
                 for (let n = 0; n < chapter.nodes.length; n++) {
                     if (chapter.nodes[n].status === 'active') {
-                        // Mark current as completed
                         chapter.nodes[n] = { ...chapter.nodes[n], status: 'completed' }
-                        // Unlock next node
                         if (n + 1 < chapter.nodes.length) {
                             chapter.nodes[n + 1] = { ...chapter.nodes[n + 1], status: 'active' }
                         }
@@ -369,7 +393,7 @@ export default function DashboardPage() {
                 <div className="hidden lg:block w-80 flex-shrink-0 space-y-6">
 
                     {/* Challenge Inbox */}
-                    <ChallengeInbox onAcceptChallenge={handleAcceptChallenge} />
+                    <ChallengeInbox invites={invites} onAcceptChallenge={handleAcceptChallenge} />
 
                     {/* Weekly Goal Card */}
                     <div className="bg-white rounded-2xl p-6 border-2 border-slate-200 shadow-sm relative overflow-hidden">
@@ -420,7 +444,6 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Render the Lesson Modal */}
             <LessonModal
                 isOpen={isLessonModalOpen}
                 onClose={() => setIsLessonModalOpen(false)}
