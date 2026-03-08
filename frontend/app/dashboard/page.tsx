@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/utils/supabase/client'
 import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
 import Link from 'next/link'
 import { LessonModal, LessonData } from '@/components/LessonModal'
@@ -88,11 +89,65 @@ export default function DashboardPage() {
     const [xp, setXp] = useState(350)
     const [isLessonModalOpen, setIsLessonModalOpen] = useState(false)
     const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null)
+    const [chapters, setChapters] = useState<Chapter[]>([])
+    const [activeLessonData, setActiveLessonData] = useState<LessonData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [userId, setUserId] = useState<string | null>(null)
+
+    // Load User
+    useEffect(() => {
+        const supabase = createClient()
+        supabase.auth.getSession().then(({ data }: any) => {
+            setUserId(data.session?.user?.id ?? null)
+        })
+    }, [])
+
+    // Fetch Dashboard Data
+    useEffect(() => {
+        if (userId === null) return // Wait for user ID resolution
+
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+        
+        const fetchDashboard = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/api/dashboard/${userId}`)
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        // Fallback to mock data or empty state if no survey found
+                        setChapters(MOCK_CHAPTERS)
+                        setActiveLessonData(MOCK_LESSON_DATA)
+                        setLoading(false)
+                        return
+                    }
+                    throw new Error('Failed to load dashboard data')
+                }
+                const data = await res.json()
+                setChapters(data.chapters)
+                setActiveLessonData(data.activeLesson)
+                setLoading(false)
+            } catch (err: any) {
+                console.error(err)
+                setError(err.message)
+                // Fallback to mock data for presentation purposes if backend fails
+                setChapters(MOCK_CHAPTERS)
+                setActiveLessonData(MOCK_LESSON_DATA)
+                setLoading(false)
+            }
+        }
+        
+        fetchDashboard()
+    }, [userId])
 
     const handleNodeClick = (node: LessonNode) => {
-        if (node.status === 'active') {
-            // Load the mock lesson data for this test
-            setSelectedLesson(MOCK_LESSON_DATA)
+        if (node.status === 'active' || node.status === 'completed') {
+            // Load the fetched active lesson data
+            if (activeLessonData) {
+                setSelectedLesson({
+                    ...activeLessonData,
+                    title: node.title
+                })
+            }
             setIsLessonModalOpen(true)
         }
     }
@@ -100,7 +155,43 @@ export default function DashboardPage() {
     const handleLessonComplete = (xpEarned: number) => {
         setXp(prev => prev + xpEarned)
         // Here you would also update the node status locally or via API
+        setChapters(prevChapters => {
+            const newChapters = [...prevChapters]
+            let foundActive = false
+            for (let c = 0; c < newChapters.length; c++) {
+                const chapter = { ...newChapters[c], nodes: [...newChapters[c].nodes] }
+                newChapters[c] = chapter
+                
+                for (let n = 0; n < chapter.nodes.length; n++) {
+                    if (chapter.nodes[n].status === 'active') {
+                        // Mark current as completed
+                        chapter.nodes[n] = { ...chapter.nodes[n], status: 'completed' }
+                        // Unlock next node
+                        if (n + 1 < chapter.nodes.length) {
+                            chapter.nodes[n + 1] = { ...chapter.nodes[n + 1], status: 'active' }
+                        }
+                        foundActive = true
+                        break
+                    }
+                }
+                if (foundActive) break
+            }
+            return newChapters
+        })
     }
+
+    if (loading) {
+        return (
+             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                 <div className="flex items-center gap-3">
+                     <Target className="w-6 h-6 text-indigo-500 animate-pulse" />
+                     <span className="font-bold text-slate-500">Loading Dashboard...</span>
+                 </div>
+             </div>
+        )
+    }
+
+    // Now standard return flow for the page (replace `MOCK_CHAPTERS` references below)
 
     return (
         <div className="min-h-screen bg-slate-50 selection:bg-indigo-500/30">
@@ -144,7 +235,7 @@ export default function DashboardPage() {
 
                     {/* The Path */}
                     <div className="relative pb-20">
-                        {MOCK_CHAPTERS.map((chapter, chapterIdx) => (
+                        {chapters.map((chapter, chapterIdx) => (
                             <div key={chapter.id} className="mb-16 relative">
 
                                 {/* Chapter Header */}
@@ -182,10 +273,10 @@ export default function DashboardPage() {
                                         let sizeClass = isBoss ? "w-20 h-20" : "w-16 h-16"
 
                                         if (isCompleted) {
-                                            bgClass = "bg-slate-300"
-                                            borderClass = "border-slate-400 border-b-4"
-                                            iconColor = "text-white"
-                                            shadowClass = "shadow-[0_4px_0_0_rgb(148,163,184)]" // slate-400
+                                            bgClass = "bg-amber-100"
+                                            borderClass = "border-amber-200 border-b-4"
+                                            iconColor = "text-amber-500"
+                                            shadowClass = "shadow-[0_4px_0_0_rgb(253,230,138)]" // amber-200
                                         } else if (isActive) {
                                             bgClass = "bg-indigo-500"
                                             borderClass = "border-indigo-600 border-b-6 shadow-xl shadow-indigo-500/30"
@@ -265,16 +356,13 @@ export default function DashboardPage() {
 
                         <div className="flex items-end gap-2 mb-3">
                             <span className="text-3xl font-extrabold text-indigo-600">1</span>
-                            <span className="text-slate-500 font-bold mb-1">/ 15 mins</span>
+                            <span className="text-slate-500 font-bold mb-1">/ 5 mins</span>
                         </div>
 
                         <div className="w-full bg-slate-100 rounded-full h-3 mb-4 overflow-hidden">
-                            <div className="bg-indigo-500 h-3 rounded-full" style={{ width: '15%' }}></div>
+                            <div className="bg-indigo-500 h-3 rounded-full" style={{ width: '20%' }}></div>
                         </div>
 
-                        <button className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
-                            Edit Goal
-                        </button>
                     </div>
 
                     {/* Quick Start Card */}

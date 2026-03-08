@@ -20,6 +20,7 @@ export interface LessonData {
     title: string
     description: string
     duration: number // simulated duration in seconds
+    videoUrl?: string
     questions: QuizQuestion[]
 }
 
@@ -38,6 +39,8 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
     // Video State
     const [isPlaying, setIsPlaying] = useState(false)
     const [progress, setProgress] = useState(0) // 0 to 100
+    const [playbackSpeed, setPlaybackSpeed] = useState(1);
+    const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 
     // Quiz State
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0)
@@ -54,6 +57,8 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
             setPhase('video')
             setIsPlaying(false)
             setProgress(0)
+            setPlaybackSpeed(1)
+            setShowSpeedMenu(false)
             setCurrentQuestionIdx(0)
             setSelectedOptionId(null)
             setIsSubmitted(false)
@@ -73,7 +78,7 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
             // We'll tick every 100ms
             const tickRate = 100
             const totalDurationMs = lesson.duration * 1000
-            const progressPerTick = (tickRate / totalDurationMs) * 100
+            const progressPerTick = (tickRate / totalDurationMs) * 100 * playbackSpeed
 
             progressInterval.current = setInterval(() => {
                 setProgress((prev) => {
@@ -95,7 +100,7 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
         return () => {
             if (progressInterval.current) clearInterval(progressInterval.current)
         }
-    }, [isPlaying, phase, lesson])
+    }, [isPlaying, phase, lesson, playbackSpeed])
 
     const togglePlay = () => {
         if (progress >= 100) return
@@ -188,14 +193,49 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
                         ${phase === 'video' ? 'w-full aspect-video md:aspect-auto md:h-[600px]' : 'w-full md:w-[400px] aspect-video md:aspect-auto h-[300px] md:h-auto border-b md:border-b-0 md:border-r border-slate-800'}
                     `}
                 >
-                    {/* Placeholder Video Content */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-slate-900 flex flex-col items-center justify-center p-8 text-center group">
+                    {/* Video Player or Placeholder */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-slate-900 flex flex-col items-center justify-center text-center group overflow-hidden">
+                        
+                        {lesson.videoUrl ? (
+                            <video
+                                ref={(el) => {
+                                    if (el) {
+                                        // Synchronize play state
+                                        if (isPlaying && el.paused) el.play().catch(console.error)
+                                        if (!isPlaying && !el.paused) el.pause()
+                                        // Synchronize playback speed
+                                        if (el.playbackRate !== playbackSpeed) el.playbackRate = playbackSpeed
+                                    }
+                                }}
+                                src={lesson.videoUrl}
+                                className="w-full h-full object-cover"
+                                onTimeUpdate={(e) => {
+                                    const target = e.currentTarget
+                                    if (target.duration) {
+                                        setProgress((target.currentTime / target.duration) * 100)
+                                    }
+                                }}
+                                onEnded={() => {
+                                    setIsPlaying(false)
+                                    handleVideoComplete()
+                                }}
+                                // We disable standard controls so we can use our custom overlay
+                                playsInline
+                            />
+                        ) : (
+                            <div className="p-8">
+                                {/* Placeholder Content if no videoUrl is provided */}
+                                <div className={`mt-6 text-indigo-200/50 font-mono text-sm uppercase tracking-widest ${isPlaying ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
+                                    Lesson Video (Placeholder)
+                                </div>
+                            </div>
+                        )}
 
-                        {/* Fake Video Controls Overlay */}
+                        {/* Custom Video Controls Overlay */}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-6">
                             <div className="text-white/80 font-medium text-left">{lesson.title}</div>
 
-                            <div className="flex flex-col gap-2 relative">
+                            <div className="flex flex-col gap-2 relative z-20">
                                 {/* Progress Bar */}
                                 <div
                                     className="h-2 w-full bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
@@ -205,11 +245,14 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
                                         const x = e.clientX - bounds.left
                                         const newProgress = Math.min(Math.max((x / bounds.width) * 100, 0), 100)
                                         setProgress(newProgress)
+                                        
+                                        // Try to skip real video if present
+                                        const videoEl = e.currentTarget.closest('.group')?.querySelector('video')
+                                        if (videoEl && videoEl.duration) {
+                                            videoEl.currentTime = (newProgress / 100) * videoEl.duration
+                                        }
 
-                                        // Store that we are dragging on the element itself to avoid adding React state that triggers re-renders every pixel
                                         e.currentTarget.dataset.dragging = "true"
-
-                                        // Pause video while dragging
                                         if (isPlaying) {
                                             setIsPlaying(false)
                                             e.currentTarget.dataset.wasPlaying = "true"
@@ -221,6 +264,12 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
                                             const x = e.clientX - bounds.left
                                             const newProgress = Math.min(Math.max((x / bounds.width) * 100, 0), 100)
                                             setProgress(newProgress)
+                                            
+                                            // Optional: scrub video while dragging
+                                            const videoEl = e.currentTarget.closest('.group')?.querySelector('video')
+                                            if (videoEl && videoEl.duration) {
+                                                videoEl.currentTime = (newProgress / 100) * videoEl.duration
+                                            }
                                         }
                                     }}
                                     onPointerUp={(e) => {
@@ -241,13 +290,47 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
                                     />
                                 </div>
                                 {/* Controls */}
-                                <div className="flex items-center gap-4 text-white">
-                                    <button onClick={togglePlay} className="hover:text-indigo-400 transition-colors">
-                                        {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white" />}
-                                    </button>
-                                    <span className="text-sm font-mono opacity-80">
-                                        {Math.floor((progress / 100) * lesson.duration)}s / {lesson.duration}s
-                                    </span>
+                                <div className="flex items-center justify-between text-white">
+                                    <div className="flex items-center gap-4">
+                                        <button onClick={togglePlay} className="hover:text-indigo-400 transition-colors">
+                                            {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white" />}
+                                        </button>
+                                        <span className="text-sm font-mono opacity-80">
+                                            {Math.floor((progress / 100) * lesson.duration)}s / {lesson.duration}s
+                                        </span>
+                                    </div>
+                                    <div className="relative">
+                                        {/* Speed Menu Popup */}
+                                        {showSpeedMenu && (
+                                            <div className="absolute bottom-full right-0 mb-2 bg-slate-900/95 backdrop-blur border border-white/10 rounded-xl overflow-hidden shadow-2xl flex flex-col py-2 w-28 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                                {[0.5, 1, 1.25, 1.5, 2].map((speed) => (
+                                                    <button
+                                                        key={speed}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setPlaybackSpeed(speed);
+                                                            setShowSpeedMenu(false);
+                                                        }}
+                                                        className={`px-4 py-2 text-sm font-bold text-left transition-colors flex items-center justify-between
+                                                            ${playbackSpeed === speed ? 'bg-indigo-600/50 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}
+                                                        `}
+                                                    >
+                                                        {speed === 1 ? 'Normal' : `${speed}x`}
+                                                        {playbackSpeed === speed && <CheckCircle2 className="w-4 h-4 text-indigo-400" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowSpeedMenu(!showSpeedMenu);
+                                            }}
+                                            className="text-sm font-bold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                        >
+                                            {playbackSpeed === 1 ? '1x' : `${playbackSpeed}x`}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -256,16 +339,11 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete }: LessonModal
                         {!isPlaying && progress < 100 && (
                             <button
                                 onClick={togglePlay}
-                                className="w-20 h-20 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-110 transition-all duration-300 z-10"
+                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-110 transition-all duration-300 z-10"
                             >
                                 <Play className="w-8 h-8 ml-1 fill-white" />
                             </button>
                         )}
-
-                        {/* Placeholder Label */}
-                        <div className={`mt-6 text-indigo-200/50 font-mono text-sm uppercase tracking-widest ${isPlaying ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
-                            Lesson Video (Placeholder)
-                        </div>
 
                         {/* Skip Video Button */}
                         {phase === 'video' && (
