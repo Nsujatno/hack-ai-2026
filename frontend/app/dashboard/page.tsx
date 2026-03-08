@@ -1,9 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target } from 'lucide-react'
+import { CheckCircle2, Lock, Play, Star, Zap, Flame, Trophy, Compass, ArrowRight, Target, ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
 import { LessonModal, LessonData } from '@/components/LessonModal'
+
+// Read the saved avatar URL from localStorage (written by the shop Save button)
+const DEFAULT_AVATAR_URL = 'https://api.dicebear.com/9.x/avataaars/svg?seed=Felix&skinColor=edb98a&top=shortFlat&topProbability=100&clothing=hoodie&accessoriesProbability=0'
+const getSavedAvatarUrl = () => {
+    if (typeof window === 'undefined') return DEFAULT_AVATAR_URL
+    return localStorage.getItem('skillDuelAvatarUrl') ?? DEFAULT_AVATAR_URL
+}
 
 // --- Mock Data ---
 // ... (Chapter data remains the same) ...
@@ -124,9 +131,17 @@ export default function DashboardPage() {
                             <Zap className="w-5 h-5 fill-indigo-500" />
                             <span>{xp}</span>
                         </div>
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center border-2 border-slate-300 overflow-hidden">
-                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User avatar" className="w-full h-full object-cover" />
+                        <div className="flex items-center gap-2">
+                            <Link href="/shop" className="flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:scale-105 transition-all shadow-sm border border-indigo-100" title="XP Shop">
+                                <ShoppingCart className="w-5 h-5" />
+                            </Link>
+                            <Link href="/trophies" className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-100 hover:scale-105 transition-all shadow-sm border border-amber-100" title="Trophy Case">
+                                <Trophy className="w-5 h-5" />
+                            </Link>
                         </div>
+                        <Link href="/shop" className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center border-2 border-slate-300 overflow-hidden hover:ring-2 hover:ring-indigo-400 transition-all" title="Customize Avatar">
+                            <img src={getSavedAvatarUrl()} alt="User avatar" className="w-full h-full object-cover" />
+                        </Link>
                     </div>
                 </div>
             </nav>
