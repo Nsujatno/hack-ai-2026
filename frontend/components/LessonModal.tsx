@@ -245,7 +245,7 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete, challengeInvi
                         <div
                             className={`
                             relative w-full transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] mx-auto
-                            ${phase === 'video' ? 'aspect-video md:aspect-auto md:h-[600px] max-w-4xl px-6 md:px-12 scale-100 opacity-100' : 'aspect-video md:aspect-auto h-[300px] md:h-auto px-8 scale-95 opacity-60'}
+                            ${phase === 'video' ? 'aspect-video md:aspect-auto md:h-[600px] max-w-4xl px-6 md:px-12 scale-100 opacity-100' : 'h-[300px] md:h-full w-full opacity-60 md:opacity-100'}
                             `}
                         >
                             {/* Video Player or Placeholder */}
@@ -394,7 +394,7 @@ export function LessonModal({ isOpen, onClose, lesson, onComplete, challengeInvi
                                 {!isPlaying && progress < 100 && (
                                     <button
                                         onClick={togglePlay}
-                                        className="w-20 h-20 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-110 transition-all duration-300 z-10"
+                                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-110 transition-all duration-300 z-10"
                                     >
                                         <Play className="w-8 h-8 ml-1 fill-white" />
                                     </button>
