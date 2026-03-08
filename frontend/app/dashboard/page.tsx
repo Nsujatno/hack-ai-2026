@@ -114,6 +114,7 @@ export default function DashboardPage() {
     const [activeLessonData, setActiveLessonData] = useState<LessonData | null>(null)
     const [pvpLesson, setPvpLesson] = useState<LessonData | null>(null)
     const [invites, setInvites] = useState<ChallengeInvite[]>(INITIAL_INVITES)
+    const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [userId, setUserId] = useState<string | null>(null)
@@ -126,9 +127,30 @@ export default function DashboardPage() {
         })
     }, [])
 
+    // Load local state overrides (for demo persistence)
+    useEffect(() => {
+        const savedDemo = localStorage.getItem('demo_dashboard_state')
+        if (savedDemo) {
+            try {
+                const parsed = JSON.parse(savedDemo)
+                if (parsed.xp !== undefined) setXp(parsed.xp)
+                if (parsed.invites !== undefined) setInvites(parsed.invites)
+            } catch (e) {}
+        }
+    }, [])
+
     // Fetch Dashboard Data
     useEffect(() => {
         if (userId === null) return // Wait for user ID resolution
+
+        const savedDemo = localStorage.getItem('demo_dashboard_state')
+        let cachedChapters: Chapter[] | null = null
+        if (savedDemo) {
+            try {
+                const parsed = JSON.parse(savedDemo)
+                if (parsed.chapters) cachedChapters = parsed.chapters
+            } catch (e) {}
+        }
 
         const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
         
@@ -138,7 +160,7 @@ export default function DashboardPage() {
                 if (!res.ok) {
                     if (res.status === 404) {
                         // Fallback to mock data or empty state if no survey found
-                        setChapters(MOCK_CHAPTERS)
+                        setChapters(cachedChapters ?? MOCK_CHAPTERS)
                         setActiveLessonData(MOCK_LESSON_DATA)
                         setLoading(false)
                         return
@@ -146,14 +168,14 @@ export default function DashboardPage() {
                     throw new Error('Failed to load dashboard data')
                 }
                 const data = await res.json()
-                setChapters(data.chapters)
+                setChapters(cachedChapters ?? data.chapters)
                 setActiveLessonData(data.activeLesson)
                 setLoading(false)
             } catch (err: any) {
                 console.error(err)
                 setError(err.message)
                 // Fallback to mock data for presentation purposes if backend fails
-                setChapters(MOCK_CHAPTERS)
+                setChapters(cachedChapters ?? MOCK_CHAPTERS)
                 setActiveLessonData(MOCK_LESSON_DATA)
                 setLoading(false)
             }
@@ -161,6 +183,18 @@ export default function DashboardPage() {
         
         fetchDashboard()
     }, [userId])
+
+    // Save state overrides on change (for demo persistence)
+    useEffect(() => {
+        if (chapters.length > 0) {
+            localStorage.setItem('demo_dashboard_state', JSON.stringify({
+                xp,
+                invites,
+                chapters
+            }))
+        }
+    }, [xp, invites, chapters])
+
 
     // Fetch PvP challenge lesson from backend (Supabase cache)
     useEffect(() => {
@@ -180,6 +214,7 @@ export default function DashboardPage() {
                     title: node.title
                 })
             }
+            setActiveNodeId(node.id)
             setActiveInvite(undefined)
             setIsLessonModalOpen(true)
         }
@@ -190,6 +225,7 @@ export default function DashboardPage() {
         if (!pvpLesson) return
         setSelectedLesson(pvpLesson)
         setActiveInvite(invite)
+        setActiveNodeId(null)
         setIsLessonModalOpen(true)
     }
 
@@ -210,28 +246,31 @@ export default function DashboardPage() {
             return
         }
 
-        // Normal lesson — advance the learning path
-        setChapters(prevChapters => {
-            const newChapters = [...prevChapters]
-            let foundActive = false
-            for (let c = 0; c < newChapters.length; c++) {
-                const chapter = { ...newChapters[c], nodes: [...newChapters[c].nodes] }
-                newChapters[c] = chapter
-                
-                for (let n = 0; n < chapter.nodes.length; n++) {
-                    if (chapter.nodes[n].status === 'active') {
-                        chapter.nodes[n] = { ...chapter.nodes[n], status: 'completed' }
-                        if (n + 1 < chapter.nodes.length) {
-                            chapter.nodes[n + 1] = { ...chapter.nodes[n + 1], status: 'active' }
+        // Normal lesson — advance the learning path based on the clicked node
+        if (activeNodeId) {
+            setChapters(prevChapters => {
+                const newChapters = [...prevChapters]
+                for (let c = 0; c < newChapters.length; c++) {
+                    const chapterIndex = newChapters[c].nodes.findIndex(n => n.id === activeNodeId)
+                    if (chapterIndex !== -1) {
+                        const chapter = { ...newChapters[c], nodes: [...newChapters[c].nodes] }
+                        newChapters[c] = chapter
+                        
+                        const currentNode = chapter.nodes[chapterIndex]
+                        if (currentNode.status === 'active') {
+                            chapter.nodes[chapterIndex] = { ...currentNode, status: 'completed' }
+                            
+                            // Unlock next node
+                            if (chapterIndex + 1 < chapter.nodes.length) {
+                                chapter.nodes[chapterIndex + 1] = { ...chapter.nodes[chapterIndex + 1], status: 'active' }
+                            }
                         }
-                        foundActive = true
                         break
                     }
                 }
-                if (foundActive) break
-            }
-            return newChapters
-        })
+                return newChapters
+            })
+        }
     }
 
     if (loading) {
