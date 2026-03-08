@@ -16,8 +16,8 @@ interface Badge {
 
 const BADGES: Badge[] = [
     { id: 'first_lesson', emoji: '🎓', name: 'First Step', description: 'Complete your first lesson.', xpReward: 50, earned: true, earnedDate: 'Mar 3', rarity: 'common' },
-    { id: 'streak_3', emoji: '🔥', name: 'On Fire', description: 'Keep a 3-day streak.', xpReward: 100, earned: true, earnedDate: 'Mar 5', rarity: 'common' },
-    { id: 'first_quiz', emoji: '✅', name: 'Quiz Whiz', description: 'Ace your first quiz.', xpReward: 75, earned: true, earnedDate: 'Mar 6', rarity: 'common' },
+    { id: 'streak_3', emoji: '🔥', name: 'On Fire', description: 'Keep a 3-day streak.', xpReward: 100, earned: false, rarity: 'common' },
+    { id: 'first_quiz', emoji: '✅', name: 'Quiz Whiz', description: 'Ace your first quiz.', xpReward: 75, earned: false, rarity: 'common' },
     { id: 'streak_7', emoji: '⚡', name: 'Lightning Rod', description: 'Maintain a 7-day streak.', xpReward: 200, earned: false, rarity: 'rare' },
     { id: 'unit_1', emoji: '🏆', name: 'Unit Champion', description: 'Beat the Unit 1 Boss Challenge.', xpReward: 500, earned: false, rarity: 'epic' },
     { id: 'perfect_score', emoji: '💯', name: 'Perfectionist', description: 'Get 100% on a quiz.', xpReward: 150, earned: false, rarity: 'rare' },
